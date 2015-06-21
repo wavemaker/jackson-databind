@@ -84,6 +84,17 @@ public enum SerializationFeature implements ConfigFeature
     FAIL_ON_SELF_REFERENCES(true),
 
     /**
+     * Feature that determines what happens when a direct cyclic-reference is detected by a POJO (and no Object Id
+     * handling is enabled for it): either a {@link JsonMappingException} is thrown (if true), or reference is processed
+     * as <code>NULL</code> (false).
+     * <p/>
+     * Feature is enabled by default.
+     *
+     * @since 2.4
+     */
+    FAIL_ON_CYCLIC_REFERENCES(false),
+
+    /**
      * Feature that determines whether Jackson code should catch
      * and wrap {@link Exception}s (but never {@link Error}s!)
      * to add additional information about
