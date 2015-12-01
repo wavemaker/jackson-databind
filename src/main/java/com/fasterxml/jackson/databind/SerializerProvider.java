@@ -26,6 +26,7 @@ import java.text.DateFormat;
 import java.util.ArrayDeque;
 import java.util.Date;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -997,24 +998,25 @@ public abstract class SerializerProvider
                 getObjectRefStack().contains(value);
     }
 
-    public void handleCyclicReference(final JsonGenerator jgen) throws IOException {
-        String refStack = printableRefStack();
+    public void handleCyclicReference(final Object bean, final JsonGenerator jgen) throws IOException {
         if (isEnabled(SerializationFeature.FAIL_ON_CYCLIC_REFERENCES)) {
+            String refStack = printableRefStack(bean);
             throw new JsonMappingException("Cyclic-reference leading to cycle, Object Reference Stack:" + refStack);
         }
         // else serializing as NULL.
         defaultSerializeValue(null, jgen);
     }
 
-    private String printableRefStack() {
+    private String printableRefStack(Object duplicateBean) {
         StringBuilder sb = new StringBuilder();
-        Object[] objects = getObjectRefStack().toArray();
-        for (int i = objects.length - 1; i >= 0; i--) {
-            sb.append(objects[i].getClass().getSimpleName());
-            if (i > 0) {
-                sb.append("->");
-            }
+
+        final Iterator<Object> objectRefIterator = getObjectRefStack().descendingIterator();
+        while (objectRefIterator.hasNext()){
+            Object object = objectRefIterator.next();
+            sb.append(object.getClass().getSimpleName());
+            sb.append("->");
         }
+        sb.append(duplicateBean.getClass().getSimpleName());
 
         return sb.toString();
     }

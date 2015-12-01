@@ -148,8 +148,9 @@ public class BeanSerializer
             _serializeWithObjectId(bean, gen, provider, true);
             return;
         }
+        // checking for cyclic reference before serializing the bean.
         if (provider.hasCyclicReference(bean) && !usesObjectId()) {
-            provider.handleCyclicReference(gen);
+            provider.handleCyclicReference(bean, gen);
             return;
         }
         provider.notifyStartSerialization(bean);

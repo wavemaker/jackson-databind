@@ -88,11 +88,11 @@ public enum SerializationFeature implements ConfigFeature
      * handling is enabled for it): either a {@link JsonMappingException} is thrown (if true), or reference is processed
      * as <code>NULL</code> (false).
      * <p/>
-     * Feature is enabled by default.
+     * Feature is disabled by default.
      *
      * @since 2.6
      */
-    FAIL_ON_CYCLIC_REFERENCES(true),
+    FAIL_ON_CYCLIC_REFERENCES(false),
 
     /**
      * Feature that determines whether Jackson code should catch
