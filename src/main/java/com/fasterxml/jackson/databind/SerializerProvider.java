@@ -23,7 +23,9 @@ import com.fasterxml.jackson.databind.util.ClassUtil;
 
 import java.io.IOException;
 import java.text.DateFormat;
+import java.util.ArrayDeque;
 import java.util.Date;
+import java.util.Deque;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -177,6 +179,12 @@ public abstract class SerializerProvider
      * @since 2.3
      */
     protected final boolean _stdNullValueSerializer;
+
+
+    /**
+     * Stack to store object call stack and to determine cycling dependency during serialization.
+     */
+    protected final ThreadLocal<Deque<Object>> _objectReferenceStackTL;
     
     /*
     /**********************************************************
@@ -196,6 +204,7 @@ public abstract class SerializerProvider
         _serializerCache = new SerializerCache();
         // Blueprints doesn't have access to any serializers...
         _knownSerializers = null;
+        _objectReferenceStackTL = new ThreadLocal<Deque<Object>>();
 
         _serializationView = null;
         _attributes = null;
@@ -227,6 +236,8 @@ public abstract class SerializerProvider
 
         _stdNullValueSerializer = (_nullValueSerializer == DEFAULT_NULL_KEY_SERIALIZER);
 
+        _objectReferenceStackTL = src._objectReferenceStackTL;
+
         _serializationView = config.getActiveView();
         _attributes = config.getAttributes();
 
@@ -251,6 +262,7 @@ public abstract class SerializerProvider
 
         // and others initialized to default empty state
         _serializerCache = new SerializerCache();
+        _objectReferenceStackTL = new ThreadLocal<Deque<Object>>();
 
         _unknownTypeSerializer = src._unknownTypeSerializer;
         _keySerializer = src._keySerializer;
@@ -946,7 +958,74 @@ public abstract class SerializerProvider
         }
         return ser;
     }
-    
+
+    /*
+   /********************************************************
+    /* Cyclic Reference: Helper methods
+    /********************************************************
+     */
+
+    /**
+     * Adds the object reference to the Stack, to trace cyclic references.
+     *
+     * @param value to be traced.
+     */
+    public void notifyStartSerialization(Object value) {
+        getObjectRefStack().push(value);
+    }
+
+    /**
+     * Removes the last added object from the stack.
+     */
+    public void notifyEndSerialization() {
+        getObjectRefStack().pop();
+
+        if (getObjectRefStack().isEmpty()) {
+            _objectReferenceStackTL.set(null); // gc
+        }
+    }
+
+    /**
+     * Check for the cycle in object serialization stack. It ignores Self references as they are handled separately.
+     *
+     * @param value to be check for cycle.
+     * @return true when value in serialization reference stack and not as top value else false
+     */
+    public boolean hasCyclicReference(Object value) {
+        // ignores self references,
+        return (!getObjectRefStack().isEmpty() && !getObjectRefStack().getFirst().equals(value)) &&
+                getObjectRefStack().contains(value);
+    }
+
+    public void handleCyclicReference(final JsonGenerator jgen) throws IOException {
+        String refStack = printableRefStack();
+        if (isEnabled(SerializationFeature.FAIL_ON_CYCLIC_REFERENCES)) {
+            throw new JsonMappingException("Cyclic-reference leading to cycle, Object Reference Stack:" + refStack);
+        }
+        // else serializing as NULL.
+        defaultSerializeValue(null, jgen);
+    }
+
+    private String printableRefStack() {
+        StringBuilder sb = new StringBuilder();
+        Object[] objects = getObjectRefStack().toArray();
+        for (int i = objects.length - 1; i >= 0; i--) {
+            sb.append(objects[i].getClass().getSimpleName());
+            if (i > 0) {
+                sb.append("->");
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private Deque<Object> getObjectRefStack() {
+        if (_objectReferenceStackTL.get() == null) {
+            _objectReferenceStackTL.set(new ArrayDeque<Object>());
+        }
+        return _objectReferenceStackTL.get();
+    }
+
     /*
     /********************************************************
     /* Convenience methods for serializing using default methods
@@ -1059,8 +1138,7 @@ public abstract class SerializerProvider
         }
     }
 
-    public final void defaultSerializeNull(JsonGenerator jgen) throws IOException
-    {
+    public final void defaultSerializeNull(JsonGenerator jgen) throws IOException {
         if (_stdNullValueSerializer) { // minor perf optimization
             jgen.writeNull();
         } else {
